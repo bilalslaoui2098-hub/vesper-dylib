@@ -1,4 +1,4 @@
-export THEOS=/var/theos
+export THEOS ?= $(HOME)/theos
 export CC = ccache gcc
 export CXX = ccache g++
 ARCHS = arm64
