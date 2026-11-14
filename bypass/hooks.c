@@ -8,6 +8,9 @@
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#include <mach-o/nlist.h>
 #include "paths.h"
 #include "anti_crash.h"
 #include "anti_scan.h"
