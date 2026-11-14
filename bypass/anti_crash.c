@@ -1,0 +1,18 @@
+#include "anti_crash.h"
+#include <pthread.h>
+#include <unistd.h>
+#include <stdlib.h>
+
+static void *watchdog_thread(void *arg) {
+    (void)arg;
+    while (1) {
+        sleep(10);
+    }
+    return NULL;
+}
+
+void anti_crash_init(void) {
+    pthread_t t;
+    pthread_create(&t, NULL, watchdog_thread, NULL);
+    pthread_detach(t);
+}
