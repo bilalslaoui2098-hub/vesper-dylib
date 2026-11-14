@@ -2,30 +2,37 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <AdSupport/AdSupport.h>
-#include <dlfcn.h>
 
-// 1. Spoof IDFV
+// متغيرات باش نحفظو الـ UUID (باش يبقى ثابت)
+static NSString* g_fake_idfv = nil;
+static NSUUID* g_fake_idfa = nil;
+
 static NSString* (*orig_idfv)(id, SEL);
 static NSString* new_idfv(id self, SEL _cmd) {
-    return [[NSUUID UUID] UUIDString];
+    // إلا كان مخبي، نولدوه مرة وحدة
+    if (!g_fake_idfv) {
+        g_fake_idfv = [[[NSUUID UUID] UUIDString] copy];
+    }
+    // كل مرة كنرجعو نفس الـ UUID
+    return g_fake_idfv;
 }
 
-// 2. Spoof IDFA
 static NSUUID* (*orig_idfa)(id, SEL);
 static NSUUID* new_idfa(id self, SEL _cmd) {
-    return [[NSUUID alloc] initWithUUIDString:@"00000000-0000-0000-0000-000000000000"];
+    if (!g_fake_idfa) {
+        g_fake_idfa = [[NSUUID alloc] initWithUUIDString:@"00000000-0000-0000-0000-000000000000"];
+    }
+    return g_fake_idfa;
 }
 
 __attribute__((constructor))
 static void init_spoof() {
-    // Spoof IDFV
     Method m_idfv = class_getInstanceMethod([UIDevice class], @selector(identifierForVendor));
     if (m_idfv) {
         orig_idfv = (NSString* (*)(id, SEL))method_getImplementation(m_idfv);
         method_setImplementation(m_idfv, (IMP)new_idfv);
     }
     
-    // Spoof IDFA
     Class asmClass = NSClassFromString(@"ASIdentifierManager");
     if (asmClass) {
         Method m_idfa = class_getInstanceMethod(asmClass, @selector(advertisingIdentifier));
