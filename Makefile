@@ -13,7 +13,7 @@ TARGET = iphone:clang:latest:15.0
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = VIG4R
+TWEAK_NAME = vesper
 
 OBFUSCATION_FLAGS = -mllvm -enable-strcry -mllvm -enable-cffobf -mllvm -enable-bcfobf -mllvm -enable-subobf -mllvm -enable-splitobf
 
