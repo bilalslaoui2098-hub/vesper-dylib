@@ -8,10 +8,71 @@
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <dlfcn.h>
-#include <substrate.h> 
 #include "paths.h"
 #include "anti_crash.h"
 #include "anti_scan.h"
+
+// --- Fishhook Definitions ---
+struct rebinding { const char *name; void *replacement; void **replaced; };
+struct rb_entry { struct rebinding *r; size_t n; struct rb_entry *next; };
+static struct rb_entry *_head;
+static int prepend(struct rb_entry **h, struct rebinding r[], size_t n){
+    struct rb_entry *e=(struct rb_entry *)malloc(sizeof(*e)); if(!e)return -1;
+    e->r=(struct rebinding *)malloc(sizeof(struct rebinding)*n); if(!e->r){free(e);return -1;}
+    memcpy(e->r,r,sizeof(struct rebinding)*n); e->n=n; e->next=*h; *h=e; return 0;
+}
+static void rebind_sec(struct rb_entry *e, struct mach_header_64 *h, intptr_t s,
+                       struct section_64 *sec, struct symtab_command *st, char *str){
+    uint32_t *ind=(uint32_t*)((char*)h+sec->offset+s);
+    struct nlist_64 *sy=(struct nlist_64*)((char*)h+st->symoff+s);
+    for(uint32_t i=0;i<sec->size/sizeof(uint32_t);i++){
+        uint32_t ix=ind[i]; if(!ix)continue;
+        struct nlist_64 *nl=&sy[ix]; if((nl->n_type&N_TYPE)!=N_UNDF)continue;
+        char *nm=str+nl->n_un.n_strx; if(*nm=='_')nm++;
+        for(size_t j=0;j<e->n;j++){
+            if(strcmp(nm,e->r[j].name)==0){
+                if(e->r[j].replaced && *e->r[j].replaced==NULL)
+                    *e->r[j].replaced=(void*)((uintptr_t)ind[i]+s);
+                ind[i]=(uint32_t)((uintptr_t)e->r[j].replacement-s);
+            }
+        }
+    }
+}
+static void rebind_all(struct rb_entry *e){
+    uint32_t c=_dyld_image_count();
+    for(uint32_t im=0;im<c;im++){
+        struct mach_header_64 *h=(struct mach_header_64*)_dyld_get_image_header(im);
+        if(!h||h->magic!=MH_MAGIC_64)continue;
+        intptr_t s=_dyld_get_image_vmaddr_slide(im);
+        struct symtab_command *st=NULL; char *str=NULL;
+        intptr_t cur=(intptr_t)h+sizeof(struct mach_header_64);
+        for(uint32_t k=0;k<h->ncmds;k++){
+            struct load_command *lc=(struct load_command*)cur;
+            if(lc->cmd==LC_SYMTAB){st=(struct symtab_command*)lc;str=(char*)((char*)h+st->stroff+s);}
+            cur+=lc->cmdsize;
+        }
+        if(!st||!str)continue;
+        intptr_t sc=(intptr_t)h+sizeof(struct mach_header_64);
+        for(uint32_t k=0;k<h->ncmds;k++){
+            struct load_command *lc=(struct load_command*)sc;
+            if(lc->cmd==LC_SEGMENT_64){
+                struct segment_command_64 *sg=(struct segment_command_64*)lc;
+                struct section_64 *ss=(struct section_64*)(sg+1);
+                for(uint32_t si=0;si<sg->nsects;si++){
+                    uint32_t t=ss[si].flags & SECTION_TYPE;
+                    if(t==S_LAZY_SYMBOL_POINTERS || t==S_NON_LAZY_SYMBOL_POINTERS)
+                        rebind_sec(e,h,s,&ss[si],st,str);
+                }
+            }
+            sc+=lc->cmdsize;
+        }
+    }
+}
+static int fishhook(struct rebinding r[], size_t n){
+    if(prepend(&_head,r,n)!=0)return -1;
+    rebind_all(_head); return 0;
+}
+// ----------------------------
 
 #define PT_TRACE_ME 0
 #define PT_ATTACH   10
@@ -70,15 +131,17 @@ void acbypass_install_hooks(void) {
     anti_crash_init();
     anti_scan_init();
     
-    void *a;
-    a = dlsym(RTLD_DEFAULT, "access");    if(a) MSHookFunction(a, (void*)r_access, (void**)&o_access);
-    a = dlsym(RTLD_DEFAULT, "stat");      if(a) MSHookFunction(a, (void*)r_stat, (void**)&o_stat);
-    a = dlsym(RTLD_DEFAULT, "lstat");     if(a) MSHookFunction(a, (void*)r_lstat, (void**)&o_lstat);
-    a = dlsym(RTLD_DEFAULT, "open");      if(a) MSHookFunction(a, (void*)r_open, (void**)&o_open);
-    a = dlsym(RTLD_DEFAULT, "openat");    if(a) MSHookFunction(a, (void*)r_openat, (void**)&o_openat);
-    a = dlsym(RTLD_DEFAULT, "faccessat"); if(a) MSHookFunction(a, (void*)r_faccessat, (void**)&o_faccessat);
-    a = dlsym(RTLD_DEFAULT, "fork");      if(a) MSHookFunction(a, (void*)r_fork, (void**)&o_fork);
-    a = dlsym(RTLD_DEFAULT, "sysctl");    if(a) MSHookFunction(a, (void*)r_sysctl, (void**)&o_sysctl);
-    a = dlsym(RTLD_DEFAULT, "csops");     if(a) MSHookFunction(a, (void*)r_csops, (void**)&o_csops);
-    a = dlsym(RTLD_DEFAULT, "ptrace");    if(a) MSHookFunction(a, (void*)r_ptrace, (void**)&o_ptrace);
+    struct rebinding r[] = {
+        {"access",    (void*)r_access,    (void**)&o_access},
+        {"stat",      (void*)r_stat,      (void**)&o_stat},
+        {"lstat",     (void*)r_lstat,     (void**)&o_lstat},
+        {"open",      (void*)r_open,      (void**)&o_open},
+        {"openat",    (void*)r_openat,    (void**)&o_openat},
+        {"faccessat", (void*)r_faccessat, (void**)&o_faccessat},
+        {"fork",      (void*)r_fork,      (void**)&o_fork},
+        {"sysctl",    (void*)r_sysctl,    (void**)&o_sysctl},
+        {"csops",     (void*)r_csops,     (void**)&o_csops},
+        {"ptrace",    (void*)r_ptrace,    (void**)&o_ptrace},
+    };
+    fishhook(r, sizeof(r)/sizeof(r[0]));
 }
