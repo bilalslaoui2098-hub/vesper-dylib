@@ -36,10 +36,7 @@ bypass/obf.c \
 bypass/paths.c \
 bypass/anti_scan.c \
 bypass/anti_crash.c \
-bypass/spoof.mm \
-bypass/exception_hook.c \
-bypass/thread_hide.c \
-bypass/anti_debug.c
+bypass/spoof.mm
 
 $(TWEAK_NAME)_FRAMEWORKS += UIKit Foundation SystemConfiguration SafariServices AudioToolbox Accelerate
 
