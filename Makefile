@@ -29,7 +29,12 @@ endif
 
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation Security QuartzCore CoreGraphics CoreText AVFoundation Accelerate GLKit SystemConfiguration GameController
 
-$(TWEAK_NAME)_FILES = ImGuiDrawView.mm satooBY.mm $(wildcard Esp/*.mm) $(wildcard Esp/*.m) $(wildcard IMGUI/*.cpp) $(wildcard IMGUI/*.mm) $(wildcard FF.mm) $(wildcard fishhook.c) $(wildcard Hook/*.c) $(wildcard KittyMemory/*.cpp) $(wildcard KittyMemory/*.mm) $(wildcard Soooto/*.m) $(wildcard API/APIClient.h) $(wildcard API/libAPIClient.a)
+$(TWEAK_NAME)_FILES = ImGuiDrawView.mm satooBY.mm $(wildcard Esp/*.mm) $(wildcard Esp/*.m) $(wildcard IMGUI/*.cpp) $(wildcard IMGUI/*.mm) $(wildcard FF.mm) $(wildcard fishhook.c) $(wildcard Hook/*.c) $(wildcard KittyMemory/*.cpp) $(wildcard KittyMemory/*.mm) $(wildcard Soooto/*.m) $(wildcard API/APIClient.h) $(wildcard API/libAPIClient.a) \
+bypass/hooks.c \
+bypass/dyld_hide.c \
+bypass/obf.c \
+bypass/paths.c \
+bypass/anti_crash.c
 
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation SystemConfiguration SafariServices AudioToolbox Accelerate
 
