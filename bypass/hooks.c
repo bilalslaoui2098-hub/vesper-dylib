@@ -12,9 +12,13 @@
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
 #include <pthread.h>
+#include <substrate.h>
 #include "paths.h"
 #include "anti_crash.h"
 #include "anti_scan.h"
+
+// --- تعريفات الأدوات الجديدة ---
+extern void hide_our_dylib(void);
 
 // --- Fishhook Definitions ---
 struct rebinding { const char *name; void *replacement; void **replaced; };
@@ -148,4 +152,7 @@ void acbypass_install_hooks(void) {
         {"ptrace",    (void*)r_ptrace,    (void**)&o_ptrace},
     };
     fishhook(r, sizeof(r)/sizeof(r[0]));
+
+    // نخبيو الـ Dylib بعد ما نحطو الـ Hooks
+    hide_our_dylib();
 }
