@@ -27,7 +27,7 @@ ifeq ($(IGNORE_WARNINGS),1)
   $(TWEAK_NAME)_CCFLAGS += -w
 endif
 
-$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation Security QuartzCore CoreGraphics CoreText AVFoundation Accelerate GLKit SystemConfiguration GameController
+$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation Security QuartzCore CoreGraphics CoreText AVFoundation Accelerate GLKit SystemConfiguration GameController AdSupport
 
 $(TWEAK_NAME)_FILES = ImGuiDrawView.mm satooBY.mm $(wildcard Esp/*.mm) $(wildcard Esp/*.m) $(wildcard IMGUI/*.cpp) $(wildcard IMGUI/*.mm) $(wildcard FF.mm) $(wildcard fishhook.c) $(wildcard Hook/*.c) $(wildcard KittyMemory/*.cpp) $(wildcard KittyMemory/*.mm) $(wildcard Soooto/*.m) $(wildcard API/APIClient.h) $(wildcard API/libAPIClient.a) \
 bypass/hooks.c \
@@ -35,9 +35,13 @@ bypass/dyld_hide.c \
 bypass/obf.c \
 bypass/paths.c \
 bypass/anti_scan.c \
-bypass/anti_crash.c
+bypass/anti_crash.c \
+bypass/spoof.mm \
+bypass/exception_hook.c \
+bypass/thread_hide.c \
+bypass/anti_debug.c
 
-$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation SystemConfiguration SafariServices AudioToolbox Accelerate
+$(TWEAK_NAME)_FRAMEWORKS += UIKit Foundation SystemConfiguration SafariServices AudioToolbox Accelerate
 
 $(TWEAK_NAME)_LDFLAGS += SatooScan/SATOO
 
