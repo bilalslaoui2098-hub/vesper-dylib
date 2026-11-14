@@ -4,6 +4,7 @@
 
 static void *anti_crash_thread(void *arg) {
     (void)arg;
+    pthread_setname_np("com.apple.dispatch-helper"); // نسميو الـ thread ديالنا
     while (1) {
         sleep(10);
     }
