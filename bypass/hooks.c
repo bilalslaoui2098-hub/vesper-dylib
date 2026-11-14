@@ -12,15 +12,9 @@
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
 #include <pthread.h>
-#include <substrate.h>
 #include "paths.h"
 #include "anti_crash.h"
 #include "anti_scan.h"
-
-// --- استدعاء الأدوات الجديدة ---
-extern void install_exception_hook(void);
-extern void install_thread_hide(void);
-extern void anti_debug_init(void);
 
 // --- Fishhook Definitions ---
 struct rebinding { const char *name; void *replacement; void **replaced; };
@@ -141,7 +135,6 @@ void acbypass_install_hooks(void) {
     anti_crash_init();
     anti_scan_init();
     
-    // 1. تفعيل الـ Fishhook للدوال ديال النظام
     struct rebinding r[] = {
         {"access",    (void*)r_access,    (void**)&o_access},
         {"stat",      (void*)r_stat,      (void**)&o_stat},
@@ -155,9 +148,4 @@ void acbypass_install_hooks(void) {
         {"ptrace",    (void*)r_ptrace,    (void**)&o_ptrace},
     };
     fishhook(r, sizeof(r)/sizeof(r[0]));
-
-    // 2. تفعيل الأدوات التكتيكية الجديدة
-    install_exception_hook();
-    install_thread_hide();
-    anti_debug_init();
 }
