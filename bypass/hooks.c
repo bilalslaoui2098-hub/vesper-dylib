@@ -11,6 +11,7 @@
 #include <substrate.h> 
 #include "paths.h"
 #include "anti_crash.h"
+#include "anti_scan.h"
 
 #define PT_TRACE_ME 0
 #define PT_ATTACH   10
@@ -67,6 +68,7 @@ static long r_ptrace(int req, pid_t pid, caddr_t a, int d){
 void acbypass_install_hooks(void) {
     paths_init();
     anti_crash_init();
+    anti_scan_init();
     
     void *a;
     a = dlsym(RTLD_DEFAULT, "access");    if(a) MSHookFunction(a, (void*)r_access, (void**)&o_access);
