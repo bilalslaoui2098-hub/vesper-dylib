@@ -7,32 +7,24 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Procursus & Theos
-        uses: dhinakg/procursus-action@main
-        with:
-          packages: ldid findutils sed coreutils make
-
-      - name: Install Theos
+      - name: Setup Theos
         run: |
-          export THEOS=$HOME/theos
-          echo "THEOS=$THEOS" >> $GITHUB_ENV
-          echo "$THEOS/bin" >> $GITHUB_PATH
-          
-          # استنساخ Theos
-          git clone --recursive https://github.com/theos/theos.git $THEOS
-          
-          # تحميل SDK (هذا مثال، تأكد من وجود SDK المناسب)
-          mkdir -p $THEOS/sdks
-          curl -L https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz --output $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
-          gunzip $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
-          tar -xf $THEOS/sdks/iPhoneOS16.5.sdk.tar -C $THEOS/sdks
-          rm $THEOS/sdks/iPhoneOS16.5.sdk.tar
+          brew install ldid xz
+          git clone --recursive https://github.com/theos/theos.git $HOME/theos
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "$HOME/theos/bin" >> $GITHUB_PATH
+
+      - name: Download SDKs
+        run: |
+          mkdir -p $HOME/theos/sdks
+          curl -L https://github.com/theos/sdks/archive/master.tar.gz | tar xz -C /tmp
+          mv /tmp/sdks-master/*.sdk $HOME/theos/sdks/
 
       - name: Build Tweak
         run: |
