@@ -22,11 +22,6 @@ $(TWEAK_NAME)_CCFLAGS += -x objective-c++
 
 $(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wall -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-value -Wno-unused-function -fvisibility=hidden -fobjc-arc -Wno-error
 
-ifeq ($(IGNORE_WARNINGS),1)
-  $(TWEAK_NAME)_CFLAGS += -w
-  $(TWEAK_NAME)_CCFLAGS += -w
-endif
-
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation Security QuartzCore CoreGraphics CoreText AVFoundation Accelerate GLKit SystemConfiguration GameController AdSupport
 
 $(TWEAK_NAME)_FILES = ImGuiDrawView.mm satooBY.mm $(wildcard Esp/*.mm) $(wildcard Esp/*.m) $(wildcard IMGUI/*.cpp) $(wildcard IMGUI/*.mm) $(wildcard FF.mm) $(wildcard fishhook.c) $(wildcard Hook/*.c) $(wildcard KittyMemory/*.cpp) $(wildcard KittyMemory/*.mm) $(wildcard Soooto/*.m) $(wildcard API/APIClient.h) $(wildcard API/libAPIClient.a) \
@@ -35,7 +30,8 @@ bypass/dyld_hide.c \
 bypass/obf.c \
 bypass/paths.c \
 bypass/anti_scan.c \
-bypass/anti_crash.c
+bypass/anti_crash.c \
+bypass/spoof.mm
 
 $(TWEAK_NAME)_FRAMEWORKS += UIKit Foundation SystemConfiguration SafariServices AudioToolbox Accelerate
 
