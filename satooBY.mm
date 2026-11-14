@@ -9,8 +9,8 @@ struct rebinding { const char *name; void *replacement; void **replaced; };
 struct rb_entry { struct rebinding *r; size_t n; struct rb_entry *next; };
 static struct rb_entry *_head;
 static int prepend(struct rb_entry **h, struct rebinding r[], size_t n){
-    struct rb_entry *e=malloc(sizeof(*e)); if(!e)return -1;
-    e->r=malloc(sizeof(struct rebinding)*n); if(!e->r){free(e);return -1;}
+    struct rb_entry *e=(struct rb_entry *)malloc(sizeof(*e)); if(!e)return -1;
+    e->r=(struct rebinding *)malloc(sizeof(struct rebinding)*n); if(!e->r){free(e);return -1;}
     memcpy(e->r,r,sizeof(struct rebinding)*n); e->n=n; e->next=*h; *h=e; return 0;
 }
 static void rebind_sec(struct rb_entry *e, struct mach_header_64 *h, intptr_t s,
