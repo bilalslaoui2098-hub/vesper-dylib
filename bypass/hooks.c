@@ -14,7 +14,7 @@
 #include <pthread.h>
 #include "paths.h"
 #include "anti_crash.h"
-#include "anti_scan.h"
+// #include "anti_scan.h"  <-- مسحنا هادي
 
 // --- Fishhook Definitions ---
 struct rebinding { const char *name; void *replacement; void **replaced; };
@@ -133,7 +133,7 @@ static long r_ptrace(int req, pid_t pid, caddr_t a, int d){
 void acbypass_install_hooks(void) {
     paths_init();
     anti_crash_init();
-    anti_scan_init();
+    // anti_scan_init(); <-- مسحنا هادي
     
     struct rebinding r[] = {
         {"access",    (void*)r_access,    (void**)&o_access},
