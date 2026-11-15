@@ -11,6 +11,8 @@
 #include <mach-o/dyld.h>
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
+#include <mach/mach.h>
+#include <mach/exception_types.h>
 #include <pthread.h>
 #include "paths.h"
 #include "anti_crash.h"
@@ -96,6 +98,8 @@ static int (*o_csops)(pid_t, uint32_t, void *, size_t);
 static int (*o_sysctl)(int *, u_int, void *, size_t *, void *, size_t);
 typedef long (*ptrace_t)(int, pid_t, caddr_t, int);
 static ptrace_t o_ptrace;
+static char* (*o_getenv)(const char*);
+static kern_return_t (*o_task_set_exception_ports)(task_t, exception_mask_t, mach_port_t, exception_behavior_t, thread_state_flavor_t);
 
 static int r_access(const char *p, int m){ if(path_is_hidden(p)){errno=ENOENT;return -1;} return o_access(p,m); }
 static int r_stat(const char *p, struct stat *b){ if(path_is_hidden(p)){errno=ENOENT;return -1;} return o_stat(p,b); }
@@ -130,6 +134,25 @@ static long r_ptrace(int req, pid_t pid, caddr_t a, int d){
     return o_ptrace(req,pid,a,d);
 }
 
+// نمنعو أي Exception Ports من النظام (باش ما يقدرش يقرا الذاكرة ديالنا)
+static kern_return_t r_task_set_exception_ports(task_t task, exception_mask_t masks, mach_port_t new_port, exception_behavior_t behavior, thread_state_flavor_t flavor) {
+    if (task == mach_task_self()) {
+        return KERN_PROTECTION_FAILURE;
+    }
+    return o_task_set_exception_ports(task, masks, new_port, behavior, flavor);
+}
+
+// نخبيو الـ Environment Variables ديالنا
+static char* r_getenv(const char* name) {
+    if (name) {
+        if (strstr(name, "DYLD_") || strstr(name, "_MSSafeMode") ||
+            strstr(name, "SUBSTRATE") || strstr(name, "Jailbreak")) {
+            return NULL;
+        }
+    }
+    return o_getenv(name);
+}
+
 void acbypass_install_hooks(void) {
     paths_init();
     anti_crash_init();
@@ -146,6 +169,11 @@ void acbypass_install_hooks(void) {
         {"sysctl",    (void*)r_sysctl,    (void**)&o_sysctl},
         {"csops",     (void*)r_csops,     (void**)&o_csops},
         {"ptrace",    (void*)r_ptrace,    (void**)&o_ptrace},
+        {"getenv",    (void*)r_getenv,    (void**)&o_getenv},
     };
     fishhook(r, sizeof(r)/sizeof(r[0]));
+
+    // Hook على task_set_exception_ports (دالة مش موجودة فـ fishhook مباشرة)
+    void* a = dlsym(RTLD_DEFAULT, "task_set_exception_ports");
+    if (a) MSHookFunction(a, (void*)r_task_set_exception_ports, (void**)&o_task_set_exception_ports);
 }
