@@ -15,10 +15,8 @@ struct Il2CppString {
     uint16_t chars[1];
 };
 
-// مؤشر للدالة اللي كتصنع النصوص فـ Unity
 static Il2CppString* (*il2cpp_string_new)(const char*);
 
-// دالة باش نلقاو il2cpp_string_new فـ وقت التشغيل
 static void init_il2cpp_string() {
     if (il2cpp_string_new) return;
     void* h = dlopen("UnityFramework", RTLD_LAZY);
@@ -29,7 +27,6 @@ static void init_il2cpp_string() {
     }
 }
 
-// نصنعو سلسلة وهمية (Fake String) مقروءة من طرف Unity
 static Il2CppString* create_fake_string(const char* str) {
     init_il2cpp_string();
     if (il2cpp_string_new) {
@@ -38,14 +35,13 @@ static Il2CppString* create_fake_string(const char* str) {
     return NULL;
 }
 
-// الـ IDs الوهمية اللي غادي نعطيوهم للعبة (تقدر تبدلهم كيفما بغيتي)
+// =====================================================================
+// 1. Spoofing IDs (الطبقة القديمة ديال HWID)
+// =====================================================================
 static const char* FAKE_DEVICE_ID = "A1B2C3D4-E5F6-7890-ABCD-EF1234567890";
 static const char* FAKE_DEVICE_MODEL = "iPhone14,5"; 
 static const char* FAKE_GOP_ID = "GOP_1234567890_ABCDEF";
 
-// =====================================================================
-// 1. DeviceIdentifier.ReadiOSDeviceIdentifier
-// =====================================================================
 static Il2CppString* (*orig_ReadiOSDeviceIdentifier)();
 static Il2CppString* hook_ReadiOSDeviceIdentifier() {
     Il2CppString* fake = create_fake_string(FAKE_DEVICE_ID);
@@ -53,9 +49,6 @@ static Il2CppString* hook_ReadiOSDeviceIdentifier() {
     return orig_ReadiOSDeviceIdentifier();
 }
 
-// =====================================================================
-// 2. SystemInfo.get_deviceUniqueIdentifier
-// =====================================================================
 static Il2CppString* (*orig_get_deviceUniqueIdentifier)();
 static Il2CppString* hook_get_deviceUniqueIdentifier() {
     Il2CppString* fake = create_fake_string(FAKE_DEVICE_ID);
@@ -63,9 +56,6 @@ static Il2CppString* hook_get_deviceUniqueIdentifier() {
     return orig_get_deviceUniqueIdentifier();
 }
 
-// =====================================================================
-// 3. PlatformUtility_iOS.getSystemInfo_Machine
-// =====================================================================
 static Il2CppString* (*orig_getSystemInfo_Machine)();
 static Il2CppString* hook_getSystemInfo_Machine() {
     Il2CppString* fake = create_fake_string(FAKE_DEVICE_MODEL);
@@ -73,17 +63,38 @@ static Il2CppString* hook_getSystemInfo_Machine() {
     return orig_getSystemInfo_Machine();
 }
 
-// =====================================================================
-// 4. GarenaMSDKMgr._CompleteGetGOPDeviceID
-// =====================================================================
-// هادي دالة void كتاخد (self, deviceID). غادي نبدلو الـ deviceID بالوهمي
 static void (*orig_CompleteGetGOPDeviceID)(void* self, Il2CppString* deviceID);
 static void hook_CompleteGetGOPDeviceID(void* self, Il2CppString* deviceID) {
     Il2CppString* fake = create_fake_string(FAKE_GOP_ID);
-    if (orig_CompleteGetGOPDeviceID) {
-        // كنعيطو للدالة الأصلية ولكن كنعطيوهالها الـ ID الوهمي
-        orig_CompleteGetGOPDeviceID(self, fake);
-    }
+    if (orig_CompleteGetGOPDeviceID) orig_CompleteGetGOPDeviceID(self, fake);
+}
+
+// =====================================================================
+// 2. Blocking Anti-Cheat Reports (الطبقة الجديدة الأقوى)
+// =====================================================================
+
+// EventLogger.LogReportCheat
+// RVA: 0x53CAF64 (هاد الدالة كتصيفط التقرير للسيرفر)
+static void (*orig_LogReportCheat)(void* cheater, uint32_t reason, void* cheaterPlayerID, void* subReason, bool inGame, uint32_t reporteeType, int reportScene, void* cheaterClientVersion, uint32_t cheaterClientType, int reportMethod);
+static void hook_LogReportCheat(void* cheater, uint32_t reason, void* cheaterPlayerID, void* subReason, bool inGame, uint32_t reporteeType, int reportScene, void* cheaterClientVersion, uint32_t cheaterClientType, int reportMethod) {
+    // كنسكتو عليها، ماكنخليوهاش تصيفط والو
+    return; 
+}
+
+// UIInGameScene.ShowHackerDetectedUI
+// RVA: 0x5E3FD58 (هاد الشاشة اللي كتطلع "Hacker Detected")
+static void (*orig_ShowHackerDetectedUI)(void* self, void* OnNormalMatchEnd, bool isHackerTeam);
+static void hook_ShowHackerDetectedUI(void* self, void* OnNormalMatchEnd, bool isHackerTeam) {
+    // كنمنعو الشاشة ما تطلعش
+    return;
+}
+
+// UIAntiHackWindowController.OnNavigationShowed
+// RVA: 0x2AC7D40 (واجهة الـ AntiHack)
+static void (*orig_OnNavigationShowed_AntiHack)(void* self, void* navigationData, bool isRoot);
+static void hook_OnNavigationShowed_AntiHack(void* self, void* navigationData, bool isRoot) {
+    // كنمنعو شاشة الـ AntiHack تبان
+    return;
 }
 
 
@@ -95,7 +106,6 @@ void Install_Unity_Spoofer(void) {
     if (!h) h = dlopen("@rpath/UnityFramework.framework/UnityFramework", RTLD_LAZY);
     if (!h) return;
 
-    // نلقاو الـ base ديال UnityFramework فـ الذاكرة
     uint32_t count = _dyld_image_count();
     uintptr_t unity_base = 0;
     for (uint32_t i = 0; i < count; i++) {
@@ -107,17 +117,25 @@ void Install_Unity_Spoofer(void) {
     }
     if (!unity_base) { dlclose(h); return; }
 
-    // العناوين (RVAs) اللي لقيناهم فـ dump.cs
+    // --- 1. Spoofs ---
     uint64_t rva_ReadiOSDeviceIdentifier   = 0x55278B8;
     uint64_t rva_get_deviceUniqueIdentifier = 0x8D673D8;
     uint64_t rva_getSystemInfo_Machine      = 0x6B90330;
     uint64_t rva_CompleteGetGOPDeviceID     = 0x6D0BE18;
 
-    // نضربو الـ Hooks
     MSHookFunction((void*)(unity_base + rva_ReadiOSDeviceIdentifier), (void*)hook_ReadiOSDeviceIdentifier, (void**)&orig_ReadiOSDeviceIdentifier);
     MSHookFunction((void*)(unity_base + rva_get_deviceUniqueIdentifier), (void*)hook_get_deviceUniqueIdentifier, (void**)&orig_get_deviceUniqueIdentifier);
     MSHookFunction((void*)(unity_base + rva_getSystemInfo_Machine), (void*)hook_getSystemInfo_Machine, (void**)&orig_getSystemInfo_Machine);
     MSHookFunction((void*)(unity_base + rva_CompleteGetGOPDeviceID), (void*)hook_CompleteGetGOPDeviceID, (void**)&orig_CompleteGetGOPDeviceID);
+
+    // --- 2. Anti-Cheat Blockers ---
+    uint64_t rva_LogReportCheat             = 0x53CAF64;
+    uint64_t rva_ShowHackerDetectedUI       = 0x5E3FD58;
+    uint64_t rva_OnNavigationShowed_AntiHack = 0x2AC7D40;
+
+    MSHookFunction((void*)(unity_base + rva_LogReportCheat), (void*)hook_LogReportCheat, (void**)&orig_LogReportCheat);
+    MSHookFunction((void*)(unity_base + rva_ShowHackerDetectedUI), (void*)hook_ShowHackerDetectedUI, (void**)&orig_ShowHackerDetectedUI);
+    MSHookFunction((void*)(unity_base + rva_OnNavigationShowed_AntiHack), (void*)hook_OnNavigationShowed_AntiHack, (void**)&orig_OnNavigationShowed_AntiHack);
 
     dlclose(h);
 }
@@ -125,10 +143,9 @@ void Install_Unity_Spoofer(void) {
 // =====================================================================
 // تأخير التحميل (Delayed Injection)
 // =====================================================================
-// هاد الـ Constructor غادي يتحمل مع الديلب، ولكن غادي يستنى 3 ثواني
-// باش يضمن أن UnityFramework كامل تحمل قبل ما نضربو الـ Hooks
 __attribute__((constructor))
 static void init_unity_spoofer() {
+    // كنسناو 3 ثواني باش نضمنو أن Unity واجد وكامل تحمل
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         Install_Unity_Spoofer();
     });
