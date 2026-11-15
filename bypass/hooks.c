@@ -15,11 +15,9 @@
 #include "paths.h"
 #include "anti_crash.h"
 #include "anti_scan.h"
+#include "install.h"
 
-// --- استدعاء دالة الـ Spoofer الجديدة ديال Unity ---
-extern void Install_Unity_Spoofer();
-
-// --- Fishhook Definitions ---
+// --- Fishhook (kima kant) ---
 struct rebinding { const char *name; void *replacement; void **replaced; };
 struct rb_entry { struct rebinding *r; size_t n; struct rb_entry *next; };
 static struct rb_entry *_head;
@@ -79,8 +77,23 @@ static int fishhook(struct rebinding r[], size_t n){
     if(prepend(&_head,r,n)!=0)return -1;
     rebind_all(_head); return 0;
 }
-// ----------------------------
 
+// --- Dylib hide: proc_pidinfo w proc_pidpath ---
+static int (*orig_proc_pidinfo)(int, int, uint64_t, void*, int);
+static int (*orig_proc_pidpath)(int, char*, uint32_t);
+
+static int hook_proc_pidinfo(int pid, int flavor, uint64_t arg, void* buffer, int size){
+    // PROC_PIDLISTFDS=1, PROC_PIDREGIONPATHINFO=3
+    if(flavor == 1 || flavor == 3) return 0;
+    return orig_proc_pidinfo(pid, flavor, arg, buffer, size);
+}
+static int hook_proc_pidpath(int pid, char* buffer, uint32_t size){
+    // Hide our dylib path from appearing in process info
+    if(buffer && strstr(buffer, "vesper") != NULL) return -1;
+    return orig_proc_pidpath(pid, buffer, size);
+}
+
+// --- System call hooks ---
 #define PT_TRACE_ME 0
 #define PT_ATTACH   10
 #define CS_OPS_STATUS 0
@@ -133,12 +146,25 @@ static long r_ptrace(int req, pid_t pid, caddr_t a, int d){
     return o_ptrace(req,pid,a,d);
 }
 
+// --- Deferred unity spoofer: 3 thwani apres dyld init ---
+static void* deferred_spoof(void* arg){
+    sleep(3);
+    // Check if il2cpp is ready, then install
+    void* h = dlopen("UnityFramework", RTLD_LAZY);
+    if(!h) h = dlopen("@rpath/UnityFramework.framework/UnityFramework", RTLD_LAZY);
+    if(h){
+        Install_Unity_Spoofer();
+        dlclose(h);
+    }
+    return NULL;
+}
+
 void acbypass_install_hooks(void) {
     paths_init();
     anti_crash_init();
     anti_scan_init();
     
-    // 1. تفعيل الـ fishhook للدوال ديال النظام
+    // 1. Fishhook
     struct rebinding r[] = {
         {"access",    (void*)r_access,    (void**)&o_access},
         {"stat",      (void*)r_stat,      (void**)&o_stat},
@@ -153,6 +179,17 @@ void acbypass_install_hooks(void) {
     };
     fishhook(r, sizeof(r)/sizeof(r[0]));
 
-    // 2. تفعيل الـ Spoofer ديال Unity (اللي كيخبي الـ HWID الحقيقي)
-    Install_Unity_Spoofer();
+    // 2. Proc hide (kiymkn ykon mashi mawjoud, donc check)
+    void* libproc = dlopen("/usr/lib/libproc.dylib", RTLD_LAZY);
+    if(libproc){
+        void* ppinfo = dlsym(libproc, "proc_pidinfo");
+        if(ppinfo) MSHookFunction(ppinfo, (void*)hook_proc_pidinfo, (void**)&orig_proc_pidinfo);
+        void* pppath = dlsym(libproc, "proc_pidpath");
+        if(pppath) MSHookFunction(pppath, (void*)hook_proc_pidpath, (void**)&orig_proc_pidpath);
+    }
+
+    // 3. Unity spoofer: defer 3 thwani bash ykoun il2cpp wajd
+    pthread_t t;
+    pthread_create(&t, NULL, deferred_spoof, NULL);
+    pthread_detach(t);
 }
