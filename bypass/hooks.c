@@ -16,6 +16,9 @@
 #include "anti_crash.h"
 #include "anti_scan.h"
 
+// --- استدعاء دالة الـ Spoofer الجديدة ديال Unity ---
+extern void Install_Unity_Spoofer();
+
 // --- Fishhook Definitions ---
 struct rebinding { const char *name; void *replacement; void **replaced; };
 struct rb_entry { struct rebinding *r; size_t n; struct rb_entry *next; };
@@ -135,6 +138,7 @@ void acbypass_install_hooks(void) {
     anti_crash_init();
     anti_scan_init();
     
+    // 1. تفعيل الـ fishhook للدوال ديال النظام
     struct rebinding r[] = {
         {"access",    (void*)r_access,    (void**)&o_access},
         {"stat",      (void*)r_stat,      (void**)&o_stat},
@@ -148,4 +152,7 @@ void acbypass_install_hooks(void) {
         {"ptrace",    (void*)r_ptrace,    (void**)&o_ptrace},
     };
     fishhook(r, sizeof(r)/sizeof(r[0]));
+
+    // 2. تفعيل الـ Spoofer ديال Unity (اللي كيخبي الـ HWID الحقيقي)
+    Install_Unity_Spoofer();
 }
