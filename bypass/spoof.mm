@@ -1,44 +1,58 @@
-#import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
-#import <objc/runtime.h>
-#import <AdSupport/AdSupport.h>
+#include <substrate.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+#include "Helper/Mem.h" // باش نستعملو getRealOffset
 
-// متغيرات باش نحفظو الـ UUID (باش يبقى ثابت)
-static NSString* g_fake_idfv = nil;
-static NSUUID* g_fake_idfa = nil;
+// تعريف هيكل السلسلة ديال Unity (Il2CppString)
+struct Il2CppString {
+    void *klass;
+    void *monitor;
+    int length;
+    uint16_t chars[1];
+};
 
-static NSString* (*orig_idfv)(id, SEL);
-static NSString* new_idfv(id self, SEL _cmd) {
-    // إلا كان مخبي، نولدوه مرة وحدة
-    if (!g_fake_idfv) {
-        g_fake_idfv = [[[NSUUID UUID] UUIDString] copy];
-    }
-    // كل مرة كنرجعو نفس الـ UUID
-    return g_fake_idfv;
+// دالة باش نصنعو سلسلة جديدة فـ Unity
+extern "C" Il2CppString* il2cpp_string_new(const char* str);
+
+// المؤشرات للأدوال الأصلية
+static Il2CppString* (*orig_get_DeviceUniqueIdentifier_Instance)(void* self);
+static Il2CppString* (*orig_get_DeviceUniqueIdentifier_Static)();
+static Il2CppString* (*orig_GetDeviceUniqueIdentifier)();
+
+// الدالة الوهمية اللي غادي ترجع ID جديد
+Il2CppString* new_get_DeviceUniqueIdentifier() {
+    // هنا كنعطيو ID وهمي جديد (تقدر تبدلو كل مرة)
+    return il2cpp_string_new("A1B2C3D4-E5F6-7890-ABCD-EF1234567890");
 }
 
-static NSUUID* (*orig_idfa)(id, SEL);
-static NSUUID* new_idfa(id self, SEL _cmd) {
-    if (!g_fake_idfa) {
-        g_fake_idfa = [[NSUUID alloc] initWithUUIDString:@"00000000-0000-0000-0000-000000000000"];
-    }
-    return g_fake_idfa;
+Il2CppString* new_get_DeviceUniqueIdentifier_Instance(void* self) {
+    return new_get_DeviceUniqueIdentifier();
 }
 
-__attribute__((constructor))
-static void init_spoof() {
-    Method m_idfv = class_getInstanceMethod([UIDevice class], @selector(identifierForVendor));
-    if (m_idfv) {
-        orig_idfv = (NSString* (*)(id, SEL))method_getImplementation(m_idfv);
-        method_setImplementation(m_idfv, (IMP)new_idfv);
+// دالة التركيب
+void Install_Unity_Spoofer() {
+    // العناوين اللي لقيتيها فـ dump.cs
+    uint64_t rva_instance = 0x462A1AC;
+    uint64_t rva_static = 0x8D673D8;
+    uint64_t rva_private = 0x8D67418;
+
+    // نلقاو العناوين الحقيقية فـ الذاكرة
+    void* addr_instance = (void*)getRealOffset(rva_instance);
+    void* addr_static = (void*)getRealOffset(rva_static);
+    void* addr_private = (void*)getRealOffset(rva_private);
+
+    if (addr_instance) {
+        MSHookFunction(addr_instance, (void*)new_get_DeviceUniqueIdentifier_Instance, (void**)&orig_get_DeviceUniqueIdentifier_Instance);
+        printf("[*] Hooked DeviceUniqueIdentifier (Instance) at %p\n", addr_instance);
     }
-    
-    Class asmClass = NSClassFromString(@"ASIdentifierManager");
-    if (asmClass) {
-        Method m_idfa = class_getInstanceMethod(asmClass, @selector(advertisingIdentifier));
-        if (m_idfa) {
-            orig_idfa = (NSUUID* (*)(id, SEL))method_getImplementation(m_idfa);
-            method_setImplementation(m_idfa, (IMP)new_idfa);
-        }
+    if (addr_static) {
+        MSHookFunction(addr_static, (void*)new_get_DeviceUniqueIdentifier, (void**)&orig_get_DeviceUniqueIdentifier_Static);
+        printf("[*] Hooked DeviceUniqueIdentifier (Static) at %p\n", addr_static);
+    }
+    if (addr_private) {
+        MSHookFunction(addr_private, (void*)new_get_DeviceUniqueIdentifier, (void**)&orig_GetDeviceUniqueIdentifier);
+        printf("[*] Hooked GetDeviceUniqueIdentifier (Private) at %p\n", addr_private);
     }
 }
