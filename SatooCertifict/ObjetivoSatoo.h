@@ -1,3 +1,4 @@
+#import "BPSpoof.h"
 #include <substrate.h>
 #include <mach-o/dyld.h>
 #include <Foundation/Foundation.h>
