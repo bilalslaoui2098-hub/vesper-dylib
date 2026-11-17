@@ -1,3 +1,4 @@
+#import "BPSpoof.h"
 // BPPatches.m
 #import "BPPatches.h"
 #import "BPEngine.h"
@@ -27,6 +28,8 @@
     [self applyAntiCheatSilence:e];
     [self applyAimModifiers:e];
     [self applyCFunctionHooks];
+    apply_sha256_hook();
+    apply_file_redirect_hooks();
     [self applyMethodSwizzles];
 }
 

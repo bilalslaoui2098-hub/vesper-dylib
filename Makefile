@@ -28,7 +28,8 @@ $(TWEAK_NAME)_FILES = ImGuiDrawView.mm satooBY.mm $(wildcard Esp/*.mm) $(wildcar
 bypass/bypass.m \
 bypass/BPEngine.m \
 bypass/BPPatches.m \
-bypass/fishhook.c
+bypass/fishhook.c \
+bypass/BPSpoof.m
 
 $(TWEAK_NAME)_FRAMEWORKS += UIKit Foundation SystemConfiguration SafariServices AudioToolbox Accelerate
 
