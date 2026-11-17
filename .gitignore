@@ -1,0 +1,8 @@
+.theos/
+packages/
+obj/
+*.deb
+*.dylib
+*.o
+build.log
+build_verbose.log
