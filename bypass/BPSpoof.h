@@ -5,5 +5,6 @@
 
 void apply_sha256_hook(void);
 void apply_file_redirect_hooks(void);
+void apply_anti_debug_hooks(void);
 
 #endif

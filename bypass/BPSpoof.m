@@ -3,31 +3,31 @@
 #import <CommonCrypto/CommonCrypto.h>
 #import <sys/fcntl.h>
 #import <sys/stat.h>
+#import <sys/sysctl.h>
 #import <unistd.h>
 #import <string.h>
 #import <stdlib.h>
 #import <stdarg.h>
+#import <dlfcn.h>
+#import <mach-o/dyld.h>
 
 // ---------------------------------------------------------
 // 1. HASH SPOOFING (CC_SHA256)
 // ---------------------------------------------------------
 static unsigned char *(*orig_CC_SHA256)(const void *data, CC_LONG len, unsigned char *md);
 
-// Replace these bytes with the CLEAN UnityFramework SHA-256 hash!
 static const unsigned char clean_sha256[CC_SHA256_DIGEST_LENGTH] = { 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    0x2D, 0xE0, 0x05, 0xAE, 0x6C, 0x9D, 0x26, 0x3D, 
+    0xDD, 0x70, 0x5A, 0xED, 0xDA, 0x83, 0x3C, 0x29, 
+    0xA5, 0xB2, 0x70, 0x44, 0xD2, 0xF5, 0x66, 0x55, 
+    0xEC, 0xC3, 0xCF, 0x98, 0xDC, 0x7B, 0xE5, 0x4A 
 };
 
 static unsigned char *fake_CC_SHA256(const void *data, CC_LONG len, unsigned char *md) {
     unsigned char *result = orig_CC_SHA256(data, len, md);
     
-    // If the data is large enough to be UnityFramework (usually >10MB)
     if (data && len > 10000000) {
         uint32_t *magic = (uint32_t *)data;
-        // Mach-O 64-bit magic (0xFEEDFACF) or 32-bit (0xFEEDFACE)
         if (*magic == 0xFEEDFACF || *magic == 0xFEEDFACE) {
             memcpy(md, clean_sha256, CC_SHA256_DIGEST_LENGTH);
             return md;
@@ -55,8 +55,10 @@ static char clean_framework_path[1024] = {0};
 
 static int is_target_path(const char *path) {
     if (!path) return 0;
-    // XOR or obfuscate this string if needed
-    unsigned char xor_str[] = {0x0B, 0x25, 0x2D, 0x27, 0x20, 0x1C, 0x25, 0x3D, 0x36, 0x2C, 0x20, 0x3C, 0x25, 0x0B, 0x00}; char target[32]; for(int i=0; i<15; i++) target[i] = xor_str[i] ^ 0x55; return (strstr(path, target) != NULL);
+    unsigned char xor_str[] = {0x0B, 0x25, 0x2D, 0x27, 0x20, 0x1C, 0x25, 0x3D, 0x36, 0x2C, 0x20, 0x3C, 0x25, 0x0B, 0x00};
+    char target[32];
+    for(int i=0; i<15; i++) target[i] = xor_str[i] ^ 0x55;
+    return (strstr(path, target) != NULL);
 }
 
 void setup_clean_path() {
@@ -72,7 +74,7 @@ static int bp_open(const char *path, int oflag, ...) {
     }
     va_list args;
     va_start(args, oflag);
-    mode_t mode = va_arg(args, mode_t);
+    mode_t mode = va_arg(args, int);
     va_end(args);
     return orig_open(path, oflag, mode);
 }
@@ -100,7 +102,6 @@ static int bp_access(const char *path, int amode) {
 
 void apply_file_redirect_hooks(void) {
     setup_clean_path();
-    
     struct rebinding r[] = {
         {"open", bp_open, (void **)&orig_open},
         {"fopen", bp_fopen, (void **)&orig_fopen},
@@ -113,10 +114,6 @@ void apply_file_redirect_hooks(void) {
 // ---------------------------------------------------------
 // 3. ANTI-DEBUG & ANTI-JAILBREAK HOOKS
 // ---------------------------------------------------------
-#import <sys/sysctl.h>
-#import <dlfcn.h>
-#import <mach-o/dyld.h>
-
 static int (*orig_ptrace)(int request, pid_t pid, caddr_t addr, int data);
 static int (*orig_sysctl)(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 static int (*orig_sysctlbyname)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
@@ -124,13 +121,11 @@ static int (*orig_fork)(void);
 static const char *(*orig_dyld_get_image_name)(uint32_t index);
 
 static int bp_ptrace(int request, pid_t pid, caddr_t addr, int data) {
-    // Block PT_DENY_ATTACH and PT_TRACE_ME
-    if (request == 31 || request == 0) return 0; // PT_DENY_ATTACH = 31, PT_TRACE_ME = 0
+    if (request == 31 || request == 0) return 0; 
     return orig_ptrace(request, pid, addr, data);
 }
 
 static int bp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    // Block KERN_PROC queries (debugger/jailbreak detection)
     if (namelen >= 2 && name[0] == CTL_KERN && name[1] == KERN_PROC) {
         if (oldp && oldlenp) memset(oldp, 0, *oldlenp);
         return 0;
@@ -147,23 +142,22 @@ static int bp_sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *
 }
 
 static int bp_fork(void) {
-    return -1; // Prevent fork (sandbox escape check)
+    return -1; 
 }
 
 static const char *bp_dyld_get_image_name(uint32_t index) {
     const char *name = orig_dyld_get_image_name(index);
     if (!name) return name;
     
-    // Hide our dylib and hooking frameworks from anti-cheat
     if (strstr(name, "bypass") || strstr(name, "BPSpoof") || 
         strstr(name, "Substrate") || strstr(name, "ElleKit") || 
         strstr(name, "fishhook") || strstr(name, "vesper")) {
-        return "/usr/lib/libsystem_c.dylib"; // Spoof a system library
+        return "/usr/lib/libsystem_c.dylib"; 
     }
     return name;
 }
 
-void apply_anti_debug_hooks() {
+void apply_anti_debug_hooks(void) {
     struct rebinding r[] = {
         {"ptrace", bp_ptrace, (void **)&orig_ptrace},
         {"sysctl", bp_sysctl, (void **)&orig_sysctl},
