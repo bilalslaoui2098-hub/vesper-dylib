@@ -24,14 +24,11 @@ $(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wall -Wno-deprecated-declarations -Wno-unused
 
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation Security QuartzCore CoreGraphics CoreText AVFoundation Accelerate GLKit SystemConfiguration GameController AdSupport
 
-$(TWEAK_NAME)_FILES = ImGuiDrawView.mm satooBY.mm $(wildcard Esp/*.mm) $(wildcard Esp/*.m) $(wildcard IMGUI/*.cpp) $(wildcard IMGUI/*.mm) $(wildcard FF.mm) $(wildcard fishhook.c) $(wildcard Hook/*.c) $(wildcard KittyMemory/*.cpp) $(wildcard KittyMemory/*.mm) $(wildcard Soooto/*.m) $(wildcard API/APIClient.h) $(wildcard API/libAPIClient.a) \
-bypass/hooks.c \
-bypass/dyld_hide.c \
-bypass/obf.c \
-bypass/paths.c \
-bypass/anti_scan.c \
-bypass/anti_crash.c \
-bypass/unity_spoof.cpp
+$(TWEAK_NAME)_FILES = ImGuiDrawView.mm satooBY.mm $(wildcard Esp/*.mm) $(wildcard Esp/*.m) $(wildcard IMGUI/*.cpp) $(wildcard IMGUI/*.mm) $(wildcard FF.mm) $(wildcard Hook/*.c) $(wildcard KittyMemory/*.cpp) $(wildcard KittyMemory/*.mm) $(wildcard Soooto/*.m) $(wildcard API/APIClient.h) $(wildcard API/libAPIClient.a) \
+bypass/bypass.m \
+bypass/BPEngine.m \
+bypass/BPPatches.m \
+bypass/fishhook.c
 
 $(TWEAK_NAME)_FRAMEWORKS += UIKit Foundation SystemConfiguration SafariServices AudioToolbox Accelerate
 
