@@ -1,4 +1,4 @@
-#import "BPSpoof.h"
+#import "bypass/BPSpoof.h"
 #import "fishhook.h"
 #import <CommonCrypto/CommonCrypto.h>
 #import <sys/fcntl.h>
@@ -10,6 +10,9 @@
 #import <stdarg.h>
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
+#import <mach/task.h>
+#import <mach/mach_init.h>
+#import <mach/mach_traps.h>
 
 // ---------------------------------------------------------
 // 1. HASH SPOOFING (CC_SHA256)
@@ -119,6 +122,10 @@ static int (*orig_sysctl)(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 static int (*orig_sysctlbyname)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 static int (*orig_fork)(void);
 static const char *(*orig_dyld_get_image_name)(uint32_t index);
+static const struct mach_header_64 *(*orig_dyld_get_image_header)(uint32_t index);
+static uint32_t (*orig_dyld_image_count)(void);
+static kern_return_t (*orig_task_get_exception_ports)(task_t task, exception_mask_t mask, exception_mask_array_t masks, mach_msg_type_number_t *masksCnt, exception_handler_array_t old_handlers, exception_behavior_array_t old_behaviors, exception_flavor_array_t old_flavors);
+static char *(*orig_getenv)(const char *name);
 
 static int bp_ptrace(int request, pid_t pid, caddr_t addr, int data) {
     if (request == 31 || request == 0) return 0; 
@@ -157,6 +164,37 @@ static const char *bp_dyld_get_image_name(uint32_t index) {
     return name;
 }
 
+static uint32_t bp_dyld_image_count(void) {
+    uint32_t count = orig_dyld_image_count();
+    return count > 0 ? count - 1 : 0; 
+}
+
+static const struct mach_header_64 *bp_dyld_get_image_header(uint32_t index) {
+    const struct mach_header_64 *header = orig_dyld_get_image_header(index);
+    if (header) {
+        const char *name = orig_dyld_get_image_name(index);
+        if (name && (strstr(name, "vesper") || strstr(name, "BPSpoof") || strstr(name, "Substrate"))) {
+            return NULL; 
+        }
+    }
+    return header;
+}
+
+static kern_return_t bp_task_get_exception_ports(task_t task, exception_mask_t mask, exception_mask_array_t masks, mach_msg_type_number_t *masksCnt, exception_handler_array_t old_handlers, exception_behavior_array_t old_behaviors, exception_flavor_array_t old_flavors) {
+    kern_return_t kr = orig_task_get_exception_ports(task, mask, masks, masksCnt, old_handlers, old_behaviors, old_flavors);
+    if (kr == KERN_SUCCESS && masksCnt) {
+        *masksCnt = 0; 
+    }
+    return kr;
+}
+
+static char *bp_getenv(const char *name) {
+    if (name && (strcmp(name, "DYLD_INSERT_LIBRARIES") == 0 || strcmp(name, "DYLD_PRINT_STATISTICS") == 0 || strcmp(name, "DYLD_PRINT_LIBRARIES") == 0)) {
+        return NULL; 
+    }
+    return orig_getenv(name);
+}
+
 void apply_anti_debug_hooks(void) {
     struct rebinding r[] = {
         {"ptrace", bp_ptrace, (void **)&orig_ptrace},
@@ -164,6 +202,10 @@ void apply_anti_debug_hooks(void) {
         {"sysctlbyname", bp_sysctlbyname, (void **)&orig_sysctlbyname},
         {"fork", bp_fork, (void **)&orig_fork},
         {"_dyld_get_image_name", bp_dyld_get_image_name, (void **)&orig_dyld_get_image_name},
+        {"_dyld_image_count", bp_dyld_image_count, (void **)&orig_dyld_image_count},
+        {"_dyld_get_image_header", bp_dyld_get_image_header, (void **)&orig_dyld_get_image_header},
+        {"task_get_exception_ports", bp_task_get_exception_ports, (void **)&orig_task_get_exception_ports},
+        {"getenv", bp_getenv, (void **)&orig_getenv},
     };
     rebind_symbols(r, sizeof(r) / sizeof(r[0]));
 }
