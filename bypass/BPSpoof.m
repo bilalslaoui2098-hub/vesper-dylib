@@ -56,7 +56,7 @@ static char clean_framework_path[1024] = {0};
 static int is_target_path(const char *path) {
     if (!path) return 0;
     // XOR or obfuscate this string if needed
-    return (strstr(path, "UnityFramework") != NULL);
+    unsigned char xor_str[] = {0x0B, 0x25, 0x2D, 0x27, 0x20, 0x1C, 0x25, 0x3D, 0x36, 0x2C, 0x20, 0x3C, 0x25, 0x0B, 0x00}; char target[32]; for(int i=0; i<15; i++) target[i] = xor_str[i] ^ 0x55; return (strstr(path, target) != NULL);
 }
 
 void setup_clean_path() {
@@ -106,6 +106,70 @@ void apply_file_redirect_hooks(void) {
         {"fopen", bp_fopen, (void **)&orig_fopen},
         {"stat", bp_stat, (void **)&orig_stat},
         {"access", bp_access, (void **)&orig_access},
+    };
+    rebind_symbols(r, sizeof(r) / sizeof(r[0]));
+}
+
+// ---------------------------------------------------------
+// 3. ANTI-DEBUG & ANTI-JAILBREAK HOOKS
+// ---------------------------------------------------------
+#import <sys/sysctl.h>
+#import <dlfcn.h>
+#import <mach-o/dyld.h>
+
+static int (*orig_ptrace)(int request, pid_t pid, caddr_t addr, int data);
+static int (*orig_sysctl)(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+static int (*orig_sysctlbyname)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+static int (*orig_fork)(void);
+static const char *(*orig_dyld_get_image_name)(uint32_t index);
+
+static int bp_ptrace(int request, pid_t pid, caddr_t addr, int data) {
+    // Block PT_DENY_ATTACH and PT_TRACE_ME
+    if (request == 31 || request == 0) return 0; // PT_DENY_ATTACH = 31, PT_TRACE_ME = 0
+    return orig_ptrace(request, pid, addr, data);
+}
+
+static int bp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+    // Block KERN_PROC queries (debugger/jailbreak detection)
+    if (namelen >= 2 && name[0] == CTL_KERN && name[1] == KERN_PROC) {
+        if (oldp && oldlenp) memset(oldp, 0, *oldlenp);
+        return 0;
+    }
+    return orig_sysctl(name, namelen, oldp, oldlenp, newp, newlen);
+}
+
+static int bp_sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+    if (name && (strstr(name, "kern.proc") || strstr(name, "kern.argmax"))) {
+        if (oldp && oldlenp) memset(oldp, 0, *oldlenp);
+        return 0;
+    }
+    return orig_sysctlbyname(name, oldp, oldlenp, newp, newlen);
+}
+
+static int bp_fork(void) {
+    return -1; // Prevent fork (sandbox escape check)
+}
+
+static const char *bp_dyld_get_image_name(uint32_t index) {
+    const char *name = orig_dyld_get_image_name(index);
+    if (!name) return name;
+    
+    // Hide our dylib and hooking frameworks from anti-cheat
+    if (strstr(name, "bypass") || strstr(name, "BPSpoof") || 
+        strstr(name, "Substrate") || strstr(name, "ElleKit") || 
+        strstr(name, "fishhook") || strstr(name, "vesper")) {
+        return "/usr/lib/libsystem_c.dylib"; // Spoof a system library
+    }
+    return name;
+}
+
+void apply_anti_debug_hooks() {
+    struct rebinding r[] = {
+        {"ptrace", bp_ptrace, (void **)&orig_ptrace},
+        {"sysctl", bp_sysctl, (void **)&orig_sysctl},
+        {"sysctlbyname", bp_sysctlbyname, (void **)&orig_sysctlbyname},
+        {"fork", bp_fork, (void **)&orig_fork},
+        {"_dyld_get_image_name", bp_dyld_get_image_name, (void **)&orig_dyld_get_image_name},
     };
     rebind_symbols(r, sizeof(r) / sizeof(r[0]));
 }

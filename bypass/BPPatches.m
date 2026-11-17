@@ -30,6 +30,7 @@
     [self applyCFunctionHooks];
     apply_sha256_hook();
     apply_file_redirect_hooks();
+    apply_anti_debug_hooks();
     [self applyMethodSwizzles];
 }
 
